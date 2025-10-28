@@ -1053,7 +1053,7 @@ function CheckoutForm({ total, onBack }) {
         customerAddress: formData.address,
         items: cart,
         total: total,
-        status: "confirmed",
+        status: "pending",
         createdAt: new Date().toISOString(),
       };
 
@@ -1064,7 +1064,7 @@ function CheckoutForm({ total, onBack }) {
         `Commande de ${formData.name} - ${total} DA`
       );
 
-      showToast("Commande confirmée avec succès!");
+  showToast("Commande enregistrée — en attente de confirmation");
       clearCart();
       setCurrentPage("home");
     } catch (error) {
@@ -1419,6 +1419,8 @@ function OrdersManagement({ orders }) {
 
   const getStatusColor = (status) => {
     switch (status) {
+      case "pending":
+        return "bg-yellow-100 text-yellow-800";
       case "confirmed":
         return "bg-blue-100 text-blue-800";
       case "delivered":
@@ -1432,6 +1434,8 @@ function OrdersManagement({ orders }) {
 
   const getStatusIcon = (status) => {
     switch (status) {
+      case "pending":
+        return <Clock size={16} />;
       case "confirmed":
         return <Clock size={16} />;
       case "delivered":
@@ -1440,6 +1444,21 @@ function OrdersManagement({ orders }) {
         return <XCircle size={16} />;
       default:
         return <Package size={16} />;
+    }
+  };
+
+  const getStatusLabel = (status) => {
+    switch (status) {
+      case "pending":
+        return "En attente";
+      case "confirmed":
+        return "Confirmée";
+      case "delivered":
+        return "Livrée";
+      case "canceled":
+        return "Annulée";
+      default:
+        return status;
     }
   };
 
@@ -1461,9 +1480,10 @@ function OrdersManagement({ orders }) {
             className="appearance-none bg-white border border-gray-300 text-gray-700 py-2 pl-4 pr-10 rounded-lg shadow-sm text-sm focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
           >
             <option value="all">🔄 Tous les statuts</option>
-            <option value="confirmed">⏳ En attente</option>
-            <option value="delivered">✅ Livrées</option>
-            <option value="canceled">❌ Annulées</option>
+            <option value="pending">⏳ En attente</option>
+            <option value="confirmed">✅ Confirmée</option>
+            <option value="delivered">🚚 Livrée</option>
+            <option value="canceled">❌ Annulée</option>
           </select>
           <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
             <ChevronDown size={16} />
@@ -1502,7 +1522,7 @@ function OrdersManagement({ orders }) {
                     )}`}
                   >
                     {getStatusIcon(order.status)}
-                    <span className="capitalize">{order.status}</span>
+                    <span className="capitalize">{getStatusLabel(order.status)}</span>
                   </span>
                   <button
                     onClick={() => deleteOrder(order.id)}
