@@ -1,0 +1,21 @@
+/*
+  Cache-Control: no-cache
+  Clear-Site-Data: "cache"
+
+/*.jpg
+  Cache-Control: public, max-age=604800
+
+/*.png
+  Cache-Control: public, max-age=604800
+
+/*.webp
+  Cache-Control: public, max-age=604800
+
+/*.svg
+  Cache-Control: public, max-age=604800
+
+/*.ico
+  Cache-Control: public, max-age=604800
+
+/static/media/*
+  Cache-Control: public, max-age=604800

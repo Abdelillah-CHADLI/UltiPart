@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630">
+  <defs>
+    <linearGradient id="g" x1="0" x2="1">
+      <stop offset="0" stop-color="#ff7ab6" />
+      <stop offset="1" stop-color="#7c3aed" />
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#g)" />
+  <g fill="#fff" font-family="Arial, Helvetica, sans-serif">
+    <text x="60" y="220" font-size="64" font-weight="700">Cosmétiques DZ</text>
+    <text x="60" y="300" font-size="36">Cosmétiques bio • Parfums • Compléments</text>
+    <rect x="60" y="340" width="520" height="4" fill="#fff" opacity="0.6" />
+    <text x="60" y="420" font-size="20">Boutique en ligne — Livraison en Algérie</text>
+  </g>
+</svg>
