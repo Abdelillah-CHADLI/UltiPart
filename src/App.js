@@ -45,6 +45,7 @@ import {
   orderBy,
   getDocs,
 } from "firebase/firestore";
+import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 
 const firebaseConfig = {
   apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
@@ -59,6 +60,39 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
+
+if (process.env.NODE_ENV === "production") {
+  initializeAppCheck(app, {
+    provider: new ReCaptchaV3Provider(process.env.REACT_APP_RECAPTCHA_SITE_KEY),
+    isTokenAutoRefreshEnabled: true,
+  });
+}
+async function verifyImageFile(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = (e) => {
+      const arr = new Uint8Array(e.target.result).subarray(0, 4);
+      let header = "";
+      for (let i = 0; i < arr.length; i++) {
+        header += arr[i].toString(16);
+      }
+
+      // Check file signatures
+      const validHeaders = [
+        "ffd8ff", // JPEG
+        "89504e47", // PNG
+        "47494638", // GIF
+        "52494646", // WEBP (starts with RIFF)
+      ];
+
+      const isValid = validHeaders.some((validHeader) =>
+        header.startsWith(validHeader)
+      );
+      resolve(isValid);
+    };
+    reader.readAsArrayBuffer(file.slice(0, 4));
+  });
+}
 
 const FirebaseService = {
   auth: {
@@ -134,12 +168,28 @@ const FirebaseService = {
           throw new Error("Aucun fichier fourni");
         }
 
-        if (file.size > 10 * 1024 * 1024) {
+        const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+        const ALLOWED_TYPES = [
+          "image/jpeg",
+          "image/jpg",
+          "image/png",
+          "image/webp",
+          "image/gif",
+        ];
+
+        if (file.size > MAX_SIZE) {
           throw new Error("La taille du fichier doit être inférieure à 10MB");
         }
 
-        if (!file.type.startsWith("image/")) {
-          throw new Error("Le fichier doit être une image");
+        if (!ALLOWED_TYPES.includes(file.type.toLowerCase())) {
+          throw new Error(
+            "Format non autorisé. Utilisez: JPG, PNG, WEBP ou GIF"
+          );
+        }
+
+        const isRealImage = await verifyImageFile(file);
+        if (!isRealImage) {
+          throw new Error("Le fichier n'est pas une image valide");
         }
 
         console.log("Téléchargement de l'image vers Cloudinary:", file.name);
@@ -157,6 +207,11 @@ const FirebaseService = {
         formData.append("file", file);
         formData.append("upload_preset", uploadPreset);
         formData.append("folder", "cosmetics-products");
+
+        formData.append(
+          "transformation",
+          "q_auto,f_auto,w_2000,h_2000,c_limit"
+        );
 
         const response = await fetch(
           `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
@@ -648,7 +703,7 @@ function HomePage() {
           <img
             src={CAROUSEL_IMAGES[currentSlide]}
             alt="Carousel"
-                        className="w-full h-full object-contain"
+            className="w-full h-full object-contain"
           />
           <button
             onClick={prevSlide}
@@ -1064,7 +1119,7 @@ function CheckoutForm({ total, onBack }) {
         `Commande de ${formData.name} - ${total} DA`
       );
 
-  showToast("Commande enregistrée — en attente de confirmation");
+      showToast("Commande enregistrée — en attente de confirmation");
       clearCart();
       setCurrentPage("home");
     } catch (error) {
@@ -1161,7 +1216,8 @@ function CheckoutForm({ total, onBack }) {
             <span className="text-2xl font-bold text-pink-600">{total} DA</span>
           </div>
           <p className="text-xs text-gray-500 mb-4">
-            Frais de livraison non inclus — ils seront confirmés selon votre adresse de livraison.
+            Frais de livraison non inclus — ils seront confirmés selon votre
+            adresse de livraison.
           </p>
 
           <button
@@ -1199,7 +1255,9 @@ function CataloguePage() {
             href={`${process.env.PUBLIC_URL}/documents/catalogue.pdf`}
             download="Catalogue_Cosmetiques_DZ.pdf"
             className="bg-pink-500 text-white px-6 py-3 rounded-lg hover:bg-pink-600 transition inline-flex items-center space-x-2"
-            onClick={() => showToast("Le téléchargement du catalogue a commencé...")}
+            onClick={() =>
+              showToast("Le téléchargement du catalogue a commencé...")
+            }
           >
             <Download size={20} />
             <span>Télécharger le Catalogue (PDF)</span>
@@ -1224,7 +1282,17 @@ function AdminLogin() {
     setIsLoading(true);
 
     try {
-      await FirebaseService.auth.signInWithEmailAndPassword(email, password);
+      const result = await FirebaseService.auth.signInWithEmailAndPassword(
+        email,
+        password
+      );
+
+      const idTokenResult = await result.user.getIdTokenResult();
+      if (!idTokenResult.claims.admin) {
+        await FirebaseService.auth.signOut();
+        throw new Error("Accès non autorisé");
+      }
+
       await FirebaseService.requestNotificationPermission();
       setIsAdmin(true);
     } catch (err) {
@@ -1340,9 +1408,7 @@ function AdminDashboard() {
     <div className="min-h-screen bg-gray-100">
       <header className="bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-lg">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <h1 className="text-xl sm:text-2xl font-bold">
-            Administration
-          </h1>
+          <h1 className="text-xl sm:text-2xl font-bold">Administration</h1>
           <button
             onClick={handleLogout}
             className="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition text-sm sm:text-base"
@@ -1522,7 +1588,9 @@ function OrdersManagement({ orders }) {
                     )}`}
                   >
                     {getStatusIcon(order.status)}
-                    <span className="capitalize">{getStatusLabel(order.status)}</span>
+                    <span className="capitalize">
+                      {getStatusLabel(order.status)}
+                    </span>
                   </span>
                   <button
                     onClick={() => deleteOrder(order.id)}
@@ -1700,19 +1768,25 @@ function ProductForm({ product, onClose, onSave }) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
+    if (!file.type.startsWith("image/")) {
       showToast("Veuillez sélectionner une image valide", "error");
-      e.target.value = '';
+      e.target.value = "";
       return;
     }
 
     if (file.size > 10 * 1024 * 1024) {
       showToast("L'image ne doit pas dépasser 10MB", "error");
-      e.target.value = '';
+      e.target.value = "";
       return;
     }
 
-    console.log("Image sélectionnée:", file.name, "Taille:", (file.size / 1024).toFixed(2), "KB");
+    console.log(
+      "Image sélectionnée:",
+      file.name,
+      "Taille:",
+      (file.size / 1024).toFixed(2),
+      "KB"
+    );
     setFormData((prev) => ({ ...prev, imageFile: file }));
   };
 
@@ -1727,14 +1801,19 @@ function ProductForm({ product, onClose, onSave }) {
       if (formData.imageFile) {
         console.log("Début du téléchargement de l'image...");
         setUploadProgress(true);
-        
+
         try {
-          imageUrl = await FirebaseService.storage.uploadImage(formData.imageFile);
+          imageUrl = await FirebaseService.storage.uploadImage(
+            formData.imageFile
+          );
           console.log("Image téléchargée avec succès:", imageUrl);
           setUploadProgress(false);
         } catch (error) {
           console.error("Erreur lors du téléchargement:", error);
-          showToast(error.message || "Erreur lors du téléchargement de l'image", "error");
+          showToast(
+            error.message || "Erreur lors du téléchargement de l'image",
+            "error"
+          );
           setIsSubmitting(false);
           setUploadProgress(false);
           return;
@@ -1779,7 +1858,10 @@ function ProductForm({ product, onClose, onSave }) {
       onClose();
     } catch (error) {
       console.error("Erreur lors de l'enregistrement:", error);
-      showToast(error.message || "Erreur lors de l'enregistrement du produit", "error");
+      showToast(
+        error.message || "Erreur lors de l'enregistrement du produit",
+        "error"
+      );
     } finally {
       setIsSubmitting(false);
       setUploadProgress(false);
@@ -1902,7 +1984,9 @@ function ProductForm({ product, onClose, onSave }) {
                   className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-pink-50 file:text-pink-700 hover:file:bg-pink-100"
                 />
                 {uploadProgress && (
-                  <p className="text-sm text-blue-600">Téléchargement en cours...</p>
+                  <p className="text-sm text-blue-600">
+                    Téléchargement en cours...
+                  </p>
                 )}
                 {formData.image && (
                   <div className="flex items-center space-x-2">
@@ -1911,10 +1995,12 @@ function ProductForm({ product, onClose, onSave }) {
                         src={formData.image}
                         alt="Preview"
                         className="w-full h-full object-contain"
-                        style={{ objectPosition: 'top left' }}
+                        style={{ objectPosition: "top left" }}
                       />
                     </div>
-                    <span className="text-sm text-gray-600">Image actuelle</span>
+                    <span className="text-sm text-gray-600">
+                      Image actuelle
+                    </span>
                   </div>
                 )}
                 {formData.imageFile && (
